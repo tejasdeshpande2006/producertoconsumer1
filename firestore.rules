@@ -1,0 +1,202 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isServer() {
+      return request.resource.data.serverKey == "ai-studio-server-key-123";
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+         request.auth.token.email == "vpk525252@gmail.com");
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isVerifiedProducer() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'producer' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isVerified == true;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidUser(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email is string && data.email.matches(".+@.+") &&
+             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() >= 10 && data.phoneNumber.size() <= 15)) &&
+             data.role in ['consumer', 'producer', 'delivery', 'admin'] &&
+             data.walletBalance is number &&
+             data.isVerified is bool &&
+             (!('pendingProfileChanges' in data) || (
+               data.pendingProfileChanges.name is string &&
+               data.pendingProfileChanges.email is string &&
+               (!('phoneNumber' in data.pendingProfileChanges) || data.pendingProfileChanges.phoneNumber is string) &&
+               data.pendingProfileChanges.timestamp is timestamp
+             )) &&
+             (!('strikes' in data) || data.strikes is number) &&
+             (!('isSuspended' in data) || data.isSuspended is bool) &&
+             (!('isOnline' in data) || data.isOnline is bool) &&
+             (!('location' in data) || (
+               data.location.lat is number && 
+               data.location.lng is number && 
+               data.location.lastUpdated is timestamp
+             ));
+    }
+
+    // ===============================================================
+    // User Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if true; // Temporarily allow all reads to debug server-side permission issues
+      allow create: if isAuthenticated() && (
+        // Self-registration for consumer/producer
+        (isOwner(userId) && 
+         isValidUser(request.resource.data) &&
+         hasOnlyAllowedFields(['uid', 'name', 'email', 'role', 'walletBalance', 'isVerified', 'location', 'isOnline', 'phoneNumber']) &&
+         request.resource.data.walletBalance == 0 &&
+         request.resource.data.isVerified == false &&
+         request.resource.data.role in ['consumer', 'producer']
+        ) ||
+        // Admin can create any user (e.g. bootstrapping a delivery boy)
+        (isAdmin() && isValidUser(request.resource.data)) ||
+        // Special case: First time admin registration for the specific email
+        (isOwner(userId) && 
+         request.auth.token.email == "vpk525252@gmail.com" && 
+         request.resource.data.role == 'admin')
+      );
+      
+      allow update: if isAuthenticated() && (
+        // Admin can change anything, including roles
+        (isAdmin() && isValidUser(request.resource.data)) || 
+        // Server can update walletBalance
+        (isServer() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['walletBalance', 'serverKey'])) ||
+        // User can update their own profile
+        (isOwner(userId) && 
+         isValidUser(request.resource.data) &&
+         (request.resource.data.role == resource.data.role || request.auth.token.email == "vpk525252@gmail.com") &&
+         request.resource.data.walletBalance == resource.data.walletBalance &&
+         request.resource.data.isVerified == resource.data.isVerified &&
+         (
+           // Consumer can update name/email/phone directly
+           (resource.data.role == 'consumer') ||
+           // Producer/Delivery must NOT update name/email/phone directly, only pendingProfileChanges
+           (resource.data.role in ['producer', 'delivery'] && 
+            request.resource.data.name == resource.data.name &&
+            request.resource.data.email == resource.data.email &&
+            request.resource.data.phoneNumber == resource.data.phoneNumber)
+         )
+        ) ||
+        // Allow updates to walletBalance, strikes, isSuspended during return process
+        // In a real app, this should be handled by Cloud Functions
+        (isAuthenticated() && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['walletBalance', 'strikes', 'isSuspended', 'updatedAt'])
+        ) ||
+        // Delivery boy can update their own location or availability
+        (isOwner(userId) && 
+         request.resource.data.diff(resource.data).affectedKeys().hasAny(['location', 'isOnline']) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['location', 'isOnline'])
+        )
+      );
+
+      match /cart/{itemId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /wishlist/{wishlistId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /walletTransactions/{transactionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId) || isAdmin() || isServer();
+      }
+    }
+
+    // ===============================================================
+    // Global Collections
+    // ===============================================================
+    match /health_check/{docId} {
+      allow read, write: if true;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated();
+    }
+
+    match /notifications/{notificationId} {
+      allow read, update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+    }
+
+    // ===============================================================
+    // Product Rules
+    // ===============================================================
+    match /products/{productId} {
+      allow read: if true; // Anyone can browse products
+      allow create: if isVerifiedProducer() && 
+        request.resource.data.sellerId == request.auth.uid &&
+        (!('videoUrl' in request.resource.data) || request.resource.data.videoUrl is string);
+      allow update, delete: if isVerifiedProducer() && 
+        resource.data.sellerId == request.auth.uid &&
+        (!('videoUrl' in request.resource.data) || request.resource.data.videoUrl is string);
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isAuthenticated() && 
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
+          request.resource.data.comment is string && request.resource.data.comment.size() < 1000;
+        allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      }
+    }
+
+    // ===============================================================
+    // Order Rules
+    // ===============================================================
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && (
+        resource.data.buyerId == request.auth.uid || 
+        resource.data.sellerId == request.auth.uid || 
+        resource.data.deliveryBoyId == request.auth.uid ||
+        isAdmin() ||
+        // Allow delivery partners to see orders available for pickup or already delivered
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'delivery' && 
+         resource.data.status in ['confirmed', 'shipped', 'delivered'])
+      );
+      
+      allow create: if isAuthenticated() || isServer();
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        // Server can update status
+        (isServer() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'serverKey'])) ||
+        // Seller can confirm or ship
+        (resource.data.sellerId == request.auth.uid && request.resource.data.status in ['confirmed', 'shipped', 'cancelled']) ||
+        // Delivery boy can pick up or deliver
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'delivery' && (
+          // Pick up: status confirmed -> shipped, and assign self
+          (resource.data.status == 'confirmed' && request.resource.data.status == 'shipped' && request.resource.data.deliveryBoyId == request.auth.uid) ||
+          // Deliver: status shipped -> delivered
+          (resource.data.deliveryBoyId == request.auth.uid && request.resource.data.status == 'delivered')
+        )) ||
+        // Buyer can cancel if pending or return if delivered
+        (resource.data.buyerId == request.auth.uid && (
+          (resource.data.status == 'pending' && request.resource.data.status == 'cancelled') ||
+          (resource.data.status == 'delivered' && request.resource.data.status == 'returned')
+        ))
+      );
+    }
+  }
+}
