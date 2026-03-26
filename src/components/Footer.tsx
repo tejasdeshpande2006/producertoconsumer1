@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Package, Github, Twitter, Instagram, Mail, Phone, MapPin } from 'lucide-react';
+import { Github, Twitter, Instagram, Mail, Phone, MapPin } from 'lucide-react';
+import P2CLogo from './P2CLogo';
 import { motion } from 'motion/react';
 
 const Footer: React.FC = () => {
@@ -11,7 +12,7 @@ const Footer: React.FC = () => {
           <div className="col-span-1 md:col-span-1">
             <Link to="/" className="flex items-center space-x-3 mb-6">
               <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
-                <Package className="text-white w-6 h-6" />
+                <P2CLogo className="w-6 h-6" />
               </div>
               <span className="text-2xl font-black tracking-tighter text-gray-900">P2C<span className="text-indigo-600">.</span></span>
             </Link>

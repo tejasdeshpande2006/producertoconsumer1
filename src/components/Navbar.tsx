@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Wallet, User, LogOut, Package, Shield, Truck, Heart, Menu, X, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Wallet, User, LogOut, Shield, Truck, Heart, Menu, X, ChevronRight, Package } from 'lucide-react';
+import P2CLogo from './P2CLogo';
 import { useAuth } from '../context/AuthContext';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
@@ -47,7 +48,9 @@ const Navbar: React.FC = () => {
             <Link to="/" className="flex items-center space-x-4">
               <div className="w-14 h-14 bg-indigo-600 rounded-[1.25rem] flex items-center justify-center shadow-2xl shadow-indigo-200 relative overflow-hidden group border-2 border-white/20">
                 <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Package className="text-white w-8 h-8 relative z-10" />
+                <div className="relative z-10">
+                  <P2CLogo />
+                </div>
               </div>
               <span className="text-4xl font-black tracking-tighter text-gray-900 font-display uppercase leading-none">P2C<span className="text-indigo-600">.</span></span>
             </Link>
