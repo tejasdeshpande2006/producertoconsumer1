@@ -76,7 +76,7 @@ const OrderTracking: React.FC = () => {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.0-flash",
         contents: `Given a current location [${currentLoc[0]}, ${currentLoc[1]}] and a destination [${dest[0]}, ${dest[1]}], suggest 5 intermediate coordinates that would form an optimized delivery route avoiding major traffic bottlenecks (simulated). Return ONLY a JSON array of coordinate pairs [[lat, lng], ...].`,
         config: {
           responseMimeType: "application/json",

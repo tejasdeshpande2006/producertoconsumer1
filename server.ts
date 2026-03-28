@@ -1,4 +1,5 @@
 import fs from 'fs';
+import crypto from 'crypto';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
@@ -19,6 +20,11 @@ import {
   increment as getClientIncrement,
   runTransaction
 } from 'firebase/firestore';
+
+// Generate a unique ID similar to Firestore's auto-generated IDs
+const generateUniqueId = (): string => {
+  return crypto.randomBytes(10).toString('hex').substring(0, 20);
+};
 
 // ------------------------
 // Logging Setup
@@ -161,7 +167,7 @@ const initializeDb = async () => {
             update: (data: any) => getClientSetDoc(docRef, data, { merge: true }),
             delete: () => getClientSetDoc(docRef, {}, { merge: false }),
             collection: (subPath: string) => ({
-              doc: (subId?: string) => createDocShim(getClientDoc(clientDb, `${docRef.path}/${subPath}`, subId || 'auto-id'))
+              doc: (subId?: string) => createDocShim(getClientDoc(clientDb, `${docRef.path}/${subPath}`, subId || generateUniqueId()))
             })
           };
         };
@@ -170,7 +176,7 @@ const initializeDb = async () => {
 
         db = {
           collection: (path: string) => ({
-            doc: (id?: string) => createDocShim(getClientDoc(clientDb, path, id || 'auto-id')),
+            doc: (id?: string) => createDocShim(getClientDoc(clientDb, path, id || generateUniqueId())),
             limit: (n: number) => ({
               get: () => getClientDocs(getClientQuery(getClientCollection(clientDb, path), getClientLimit(n)))
             })
