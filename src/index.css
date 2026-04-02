@@ -16,6 +16,7 @@ body {
   background-attachment: fixed;
 }
 
+/* Glass morphism effects */
 .glass-surface {
   @apply bg-white/60 backdrop-blur-xl border border-white/20 shadow-xl;
 }
@@ -24,6 +25,7 @@ body {
   @apply bg-white/80 backdrop-blur-lg border border-white/30 shadow-2xl;
 }
 
+/* Glossy button with shine effect */
 .glossy-button {
   @apply relative overflow-hidden bg-indigo-600 text-white shadow-lg transition-all duration-300;
 }
@@ -41,8 +43,9 @@ body {
   @apply shadow-indigo-500/40 shadow-2xl scale-[1.02];
 }
 
+/* Glossy card with animated shine */
 .glossy-card {
-  @apply relative overflow-hidden bg-white rounded-[2.5rem] border border-gray-100 shadow-xl transition-all duration-500;
+  @apply relative overflow-hidden bg-white rounded-[2rem] border border-gray-100 shadow-xl transition-all duration-500;
 }
 
 .glossy-card::before {
@@ -56,6 +59,138 @@ body {
 
 .glossy-card:hover {
   @apply shadow-2xl shadow-indigo-100/50 -translate-y-1;
+}
+
+/* Stat card with gradient glow */
+.stat-card {
+  @apply relative overflow-hidden bg-white rounded-2xl border border-gray-100 p-6 transition-all duration-300;
+}
+
+.stat-card::after {
+  content: '';
+  @apply absolute -bottom-1/2 -right-1/2 w-full h-full rounded-full blur-3xl opacity-0 transition-opacity duration-500;
+}
+
+.stat-card:hover::after {
+  @apply opacity-20;
+}
+
+.stat-card:hover {
+  @apply shadow-xl -translate-y-1 border-transparent;
+}
+
+/* Smooth button base */
+.btn-primary {
+  @apply px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200/50 transition-all duration-200 hover:bg-indigo-700 hover:shadow-xl hover:shadow-indigo-300/50 active:scale-[0.98];
+}
+
+.btn-secondary {
+  @apply px-6 py-3 bg-white text-gray-700 font-bold rounded-xl border-2 border-gray-100 shadow-sm transition-all duration-200 hover:border-gray-200 hover:shadow-md active:scale-[0.98];
+}
+
+.btn-success {
+  @apply px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200/50 transition-all duration-200 hover:bg-emerald-700 hover:shadow-xl hover:shadow-emerald-300/50 active:scale-[0.98];
+}
+
+.btn-danger {
+  @apply px-6 py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200/50 transition-all duration-200 hover:bg-red-700 hover:shadow-xl hover:shadow-red-300/50 active:scale-[0.98];
+}
+
+/* Input styles */
+.input-field {
+  @apply w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl transition-all duration-200 outline-none;
+  @apply focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100;
+}
+
+.input-field-icon {
+  @apply pl-12;
+}
+
+/* Badge styles */
+.badge {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider;
+}
+
+.badge-success {
+  @apply bg-emerald-100 text-emerald-700;
+}
+
+.badge-warning {
+  @apply bg-amber-100 text-amber-700;
+}
+
+.badge-danger {
+  @apply bg-red-100 text-red-700;
+}
+
+.badge-info {
+  @apply bg-blue-100 text-blue-700;
+}
+
+.badge-purple {
+  @apply bg-purple-100 text-purple-700;
+}
+
+/* Progress bar animation */
+@keyframes progress {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+.animate-progress {
+  animation: progress 5s linear infinite;
+}
+
+/* Pulse glow effect */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4); }
+  50% { box-shadow: 0 0 0 12px rgba(79, 70, 229, 0); }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Shimmer loading effect */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Float animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Slide up animation */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.5s ease-out forwards;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
 }
 
 /* Custom Scrollbar */
@@ -72,6 +207,7 @@ body {
   @apply bg-gray-200 rounded-full hover:bg-gray-300 transition-colors;
 }
 
+/* Delivery marker animation */
 .delivery-marker-icon-near {
   filter: drop-shadow(0 0 10px rgba(79, 70, 229, 0.6));
   animation: marker-pulse 1.5s ease-in-out infinite;
@@ -83,6 +219,7 @@ body {
   100% { transform: scale(1); }
 }
 
+/* Hide scrollbar utility */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -90,3 +227,49 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Gradient text utility */
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600;
+}
+
+/* Section heading styles */
+.section-title {
+  @apply text-4xl md:text-5xl font-black text-gray-900 tracking-tight font-display;
+}
+
+.section-subtitle {
+  @apply text-gray-400 font-bold uppercase tracking-[0.2em] text-xs mt-2;
+}
+
+/* Mobile responsive utilities */
+@media (max-width: 640px) {
+  .glossy-card {
+    @apply rounded-2xl;
+  }
+  
+  .section-title {
+    @apply text-3xl;
+  }
+}
+
+/* Tab system */
+.tab-button {
+  @apply px-6 py-3 font-bold text-sm uppercase tracking-wider rounded-xl transition-all duration-200;
+}
+
+.tab-button-active {
+  @apply bg-indigo-600 text-white shadow-lg shadow-indigo-200/50;
+}
+
+.tab-button-inactive {
+  @apply bg-white text-gray-500 hover:bg-gray-50 border border-gray-100;
+}
+
+/* Order status colors */
+.status-pending { @apply bg-amber-100 text-amber-700 border-amber-200; }
+.status-confirmed { @apply bg-blue-100 text-blue-700 border-blue-200; }
+.status-shipped { @apply bg-purple-100 text-purple-700 border-purple-200; }
+.status-delivered { @apply bg-emerald-100 text-emerald-700 border-emerald-200; }
+.status-cancelled { @apply bg-red-100 text-red-700 border-red-200; }
+.status-returned { @apply bg-orange-100 text-orange-700 border-orange-200; }

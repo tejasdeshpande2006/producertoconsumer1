@@ -189,10 +189,10 @@ const DeliveryDashboard: React.FC = () => {
               </div>
 
               <div className="pt-4 border-t border-gray-50">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Items</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Items</p>
                 <div className="flex flex-wrap gap-2">
                   {order.items.map((item, idx) => (
-                    <span key={idx} className="px-3 py-1 bg-gray-50 rounded-lg text-xs font-bold text-gray-600">
+                    <span key={idx} className="px-3 py-1.5 bg-indigo-50 rounded-xl text-xs font-bold text-indigo-700 border border-indigo-100">
                       {item.quantity}x {item.title}
                     </span>
                   ))}
@@ -200,41 +200,57 @@ const DeliveryDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-gray-50 p-8 w-full md:w-72 flex flex-col justify-center space-y-4">
+            <div className="bg-gradient-to-br from-gray-50 to-white p-8 w-full md:w-72 flex flex-col justify-center space-y-4 border-l border-gray-100">
               <div className="text-center mb-4">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Order Total</p>
-                <p className="text-3xl font-black text-gray-900">₹{order.totalAmount.toFixed(2)}</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Order Total</p>
+                <p className="text-4xl font-black text-gray-900 font-display">₹{order.totalAmount.toFixed(0)}</p>
               </div>
               
               {order.status === 'confirmed' && (
-                <button 
+                <motion.button 
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => updateStatus(order.id, 'shipped')}
-                  className="w-full py-3 glossy-button rounded-2xl font-bold uppercase tracking-widest"
+                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold uppercase tracking-widest text-sm shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
                 >
-                  Mark as Shipped
-                </button>
+                  <Truck className="w-5 h-5" />
+                  <span>Pick Up Order</span>
+                </motion.button>
               )}
               {order.status === 'shipped' && (
-                <button 
+                <motion.button 
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => updateStatus(order.id, 'delivered')}
-                  className="w-full py-3 bg-green-600 text-white rounded-2xl font-bold hover:bg-green-700 transition-all shadow-lg shadow-green-100 uppercase tracking-widest"
+                  className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 uppercase tracking-widest text-sm flex items-center justify-center gap-2"
                 >
-                  Mark as Delivered
-                </button>
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span>Mark Delivered</span>
+                </motion.button>
               )}
               {order.status === 'delivered' && (
-                <div className="flex flex-col items-center text-green-600">
-                  <CheckCircle2 className="w-10 h-10 mb-2" />
-                  <span className="font-black uppercase tracking-widest text-xs">Completed</span>
+                <div className="flex flex-col items-center text-emerald-600 py-4">
+                  <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-3">
+                    <CheckCircle2 className="w-8 h-8" />
+                  </div>
+                  <span className="font-black uppercase tracking-widest text-xs">Delivered</span>
                 </div>
               )}
             </div>
           </div>
         ))}
         {orders.length === 0 && !loading && (
-          <div className="py-20 text-center bg-white rounded-3xl border border-dashed border-gray-200">
-            <p className="text-gray-400 font-medium">No active deliveries assigned.</p>
-          </div>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="py-24 text-center bg-white rounded-3xl border-2 border-dashed border-gray-100"
+          >
+            <div className="w-20 h-20 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Package className="w-10 h-10 text-gray-300" />
+            </div>
+            <p className="text-gray-900 font-bold text-lg mb-2">No Active Deliveries</p>
+            <p className="text-gray-400 text-sm">New orders will appear here when assigned</p>
+          </motion.div>
         )}
       </div>
       </div>

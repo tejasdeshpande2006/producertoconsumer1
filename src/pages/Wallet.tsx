@@ -97,26 +97,26 @@ const WalletPage: React.FC = () => {
       <div className="max-w-4xl mx-auto space-y-16">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           {/* Balance Card */}
-          <div className="md:col-span-2 glossy-card bg-indigo-600 p-12 text-white relative overflow-hidden shadow-2xl shadow-indigo-200/50 group border-white/40">
+          <div className="md:col-span-2 rounded-[2rem] bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-700 p-12 text-white relative overflow-hidden shadow-2xl shadow-indigo-300/50 group border border-indigo-500/30">
             <div className="relative z-10">
               <div className="flex items-center justify-between mb-16">
                 <div className="flex items-center space-x-4">
                   <div className="w-16 h-16 bg-white/20 backdrop-blur-2xl rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500 border border-white/30">
-                    <WalletIcon className="w-8 h-8" />
+                    <WalletIcon className="w-8 h-8 text-white" />
                   </div>
                   <div>
-                    <span className="font-display font-black text-xl opacity-90 tracking-tighter uppercase">Total Balance</span>
-                    <p className="text-[10px] font-black text-indigo-200 uppercase tracking-[0.3em] mt-1">Digital Assets</p>
+                    <span className="font-display font-black text-xl text-white tracking-tighter uppercase">Total Balance</span>
+                    <p className="text-[10px] font-black text-white/70 uppercase tracking-[0.3em] mt-1">Digital Assets</p>
                   </div>
                 </div>
-                <CreditCard className="w-12 h-12 opacity-30 group-hover:opacity-50 transition-opacity" />
+                <CreditCard className="w-12 h-12 text-white/40 group-hover:text-white/60 transition-opacity" />
               </div>
               <div className="space-y-4">
                 <div className="flex items-baseline space-x-3">
-                  <span className="text-2xl font-black opacity-60">₹</span>
-                  <span className="text-8xl font-black tracking-tighter font-display">{profile?.walletBalance.toFixed(2)}</span>
+                  <span className="text-2xl font-black text-white/70">₹</span>
+                  <span className="text-8xl font-black tracking-tighter font-display text-white drop-shadow-lg">{profile?.walletBalance?.toFixed(2) || '0.00'}</span>
                 </div>
-                <p className="text-indigo-100/80 text-xs font-black uppercase tracking-[0.4em]">Available for purchases</p>
+                <p className="text-white/80 text-xs font-black uppercase tracking-[0.4em]">Available for purchases</p>
               </div>
             </div>
             <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full -mr-48 -mt-48 blur-3xl group-hover:scale-110 transition-transform duration-1000" />

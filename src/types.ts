@@ -1,14 +1,28 @@
 export type UserRole = 'admin' | 'producer' | 'consumer' | 'delivery';
 
+export interface SavedAddress {
+  id: string;
+  label: string;
+  fullName: string;
+  phoneNumber: string;
+  alternatePhone?: string;
+  pincode: string;
+  city: string;
+  state: string;
+  address: string;
+  landmark?: string;
+  isDefault?: boolean;
+}
+
 export interface UserProfile {
   uid: string;
   name: string;
   email: string;
   phoneNumber?: string;
-  smsNotifications?: boolean;
   role: UserRole;
   walletBalance: number;
   isVerified: boolean;
+  savedAddresses?: SavedAddress[];
   pendingProfileChanges?: {
     name: string;
     email: string;
@@ -37,14 +51,26 @@ export interface Product {
   videoUrl?: string;
 }
 
+export interface DeliveryDetails {
+  fullName: string;
+  phoneNumber: string;
+  alternatePhone?: string;
+  pincode: string;
+  city: string;
+  state: string;
+  address: string;
+  landmark?: string;
+}
+
 export interface Order {
   id: string;
   buyerId: string;
   buyerName?: string;
   shippingAddress?: string;
+  deliveryDetails?: DeliveryDetails;
   sellerId: string;
   deliveryBoyId?: string;
-  status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
+  status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'returned' | 'return_requested';
   totalAmount: number;
   timestamp: any;
   items: {
@@ -53,6 +79,14 @@ export interface Order {
     price: number;
     quantity: number;
   }[];
+  returnRequest?: {
+    reason: string;
+    description: string;
+    requestedAt: any;
+    status: 'pending' | 'approved' | 'rejected';
+    processedAt?: any;
+    rejectionReason?: string;
+  };
 }
 
 export interface WalletTransaction {

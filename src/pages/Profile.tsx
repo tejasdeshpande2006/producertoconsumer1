@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, auth } from '../firebase';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { motion } from 'motion/react';
-import { User, Mail, Shield, Clock, CheckCircle, AlertCircle, Phone, Lock, Eye, EyeOff, MessageCircle, Truck, LogOut } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { User, Mail, Shield, Clock, CheckCircle, AlertCircle, Phone, Lock, Eye, EyeOff, Truck, LogOut, MapPin, Plus, Home, Briefcase, Trash2, Star, Edit2, X } from 'lucide-react';
+import { SavedAddress } from '../types';
 
 const Profile: React.FC = () => {
   const { profile, user } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [smsNotifications, setSmsNotifications] = useState(false);
   
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -22,14 +22,142 @@ const Profile: React.FC = () => {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+  // Address Book State
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<SavedAddress | null>(null);
+  const [addressForm, setAddressForm] = useState({
+    label: 'Home',
+    fullName: '',
+    phoneNumber: '',
+    alternatePhone: '',
+    pincode: '',
+    city: '',
+    state: '',
+    address: '',
+    landmark: '',
+    isDefault: false
+  });
+  const [savingAddress, setSavingAddress] = useState(false);
+
+  // Memoize to prevent re-renders
+  const savedAddresses = useMemo(() => profile?.savedAddresses || [], [profile?.savedAddresses]);
+
   useEffect(() => {
     if (profile) {
       setName(profile.name);
       setEmail(profile.email);
       setPhoneNumber(profile.phoneNumber || '');
-      setSmsNotifications(profile.smsNotifications || false);
     }
   }, [profile]);
+
+  const openAddressModal = (address?: SavedAddress) => {
+    if (address) {
+      setEditingAddress(address);
+      setAddressForm({
+        label: address.label,
+        fullName: address.fullName,
+        phoneNumber: address.phoneNumber,
+        alternatePhone: address.alternatePhone || '',
+        pincode: address.pincode,
+        city: address.city,
+        state: address.state,
+        address: address.address,
+        landmark: address.landmark || '',
+        isDefault: address.isDefault || false
+      });
+    } else {
+      setEditingAddress(null);
+      setAddressForm({
+        label: 'Home',
+        fullName: profile?.name || '',
+        phoneNumber: profile?.phoneNumber || '',
+        alternatePhone: '',
+        pincode: '',
+        city: '',
+        state: '',
+        address: '',
+        landmark: '',
+        isDefault: savedAddresses.length === 0
+      });
+    }
+    setShowAddressModal(true);
+  };
+
+  const handleSaveAddress = async () => {
+    if (!user || !profile) return;
+    if (!addressForm.fullName || !addressForm.phoneNumber || !addressForm.pincode || !addressForm.city || !addressForm.state || !addressForm.address) {
+      alert('Please fill all required fields');
+      return;
+    }
+
+    setSavingAddress(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const newAddress: SavedAddress = {
+        id: editingAddress?.id || `addr_${Date.now()}`,
+        ...addressForm
+      };
+
+      let updatedAddresses: SavedAddress[];
+      
+      if (editingAddress) {
+        // Update existing address
+        updatedAddresses = savedAddresses.map(a => 
+          a.id === editingAddress.id ? newAddress : a
+        );
+      } else {
+        // Add new address
+        updatedAddresses = [...savedAddresses, newAddress];
+      }
+
+      // If this is set as default, remove default from others
+      if (newAddress.isDefault) {
+        updatedAddresses = updatedAddresses.map(a => ({
+          ...a,
+          isDefault: a.id === newAddress.id
+        }));
+      }
+
+      await updateDoc(userRef, { savedAddresses: updatedAddresses });
+      setShowAddressModal(false);
+      setMessage({ type: 'success', text: editingAddress ? 'Address updated!' : 'Address saved!' });
+    } catch (error) {
+      console.error('Error saving address:', error);
+      setMessage({ type: 'error', text: 'Failed to save address' });
+    } finally {
+      setSavingAddress(false);
+    }
+  };
+
+  const handleDeleteAddress = async (addressId: string) => {
+    if (!user || !confirm('Are you sure you want to delete this address?')) return;
+    
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const updatedAddresses = savedAddresses.filter(a => a.id !== addressId);
+      await updateDoc(userRef, { savedAddresses: updatedAddresses });
+      setMessage({ type: 'success', text: 'Address deleted!' });
+    } catch (error) {
+      console.error('Error deleting address:', error);
+      setMessage({ type: 'error', text: 'Failed to delete address' });
+    }
+  };
+
+  const handleSetDefaultAddress = async (addressId: string) => {
+    if (!user) return;
+    
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const updatedAddresses = savedAddresses.map(a => ({
+        ...a,
+        isDefault: a.id === addressId
+      }));
+      await updateDoc(userRef, { savedAddresses: updatedAddresses });
+      setMessage({ type: 'success', text: 'Default address updated!' });
+    } catch (error) {
+      console.error('Error updating default:', error);
+    }
+  };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +175,6 @@ const Profile: React.FC = () => {
           name,
           email,
           phoneNumber,
-          smsNotifications,
         });
         setMessage({ type: 'success', text: 'Profile updated successfully!' });
       } else {
@@ -228,27 +355,6 @@ const Profile: React.FC = () => {
                   required
                 />
               </div>
-            </div>
-
-            <div className="flex items-center justify-between p-8 bg-gray-50/50 rounded-[2rem] border border-gray-100 group hover:bg-white hover:shadow-xl transition-all duration-500">
-              <div className="flex items-center gap-6">
-                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-xl group-hover:scale-110 group-hover:rotate-6 transition-transform">
-                  <MessageCircle className="text-indigo-600" size={28} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-gray-900 uppercase tracking-tight font-display">SMS Notifications</h3>
-                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Receive order updates via SMS</p>
-                </div>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  className="sr-only peer" 
-                  checked={smsNotifications}
-                  onChange={(e) => setSmsNotifications(e.target.checked)}
-                />
-                <div className="w-14 h-8 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
             </div>
 
             {profile.role === 'consumer' && (
@@ -435,6 +541,284 @@ const Profile: React.FC = () => {
           </form>
         </div>
       </motion.div>
+
+      {/* Address Book Section */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+      >
+        <div className="p-8">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <MapPin className="text-emerald-600" size={20} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">Saved Addresses</h2>
+            </div>
+            <button
+              onClick={() => openAddressModal()}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors"
+            >
+              <Plus size={18} />
+              <span>Add New</span>
+            </button>
+          </div>
+
+          {savedAddresses.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 rounded-2xl">
+              <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 font-medium">No saved addresses yet</p>
+              <p className="text-gray-400 text-sm mt-1">Add an address for faster checkout</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {savedAddresses.map(addr => (
+                <div 
+                  key={addr.id}
+                  className={`p-5 rounded-xl border-2 transition-all ${
+                    addr.isDefault ? 'border-emerald-200 bg-emerald-50' : 'border-gray-100 bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                        addr.label === 'Home' ? 'bg-blue-100' : addr.label === 'Work' ? 'bg-amber-100' : 'bg-gray-100'
+                      }`}>
+                        {addr.label === 'Home' ? <Home className="w-6 h-6 text-blue-600" /> : 
+                         addr.label === 'Work' ? <Briefcase className="w-6 h-6 text-amber-600" /> : 
+                         <MapPin className="w-6 h-6 text-gray-600" />}
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 mb-1">
+                          <span className="font-bold text-gray-900">{addr.label}</span>
+                          {addr.isDefault && (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full uppercase flex items-center gap-1">
+                              <Star size={10} className="fill-emerald-600" />
+                              Default
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm font-medium text-gray-700">{addr.fullName}</p>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {addr.address}, {addr.landmark ? `${addr.landmark}, ` : ''}{addr.city}, {addr.state} - {addr.pincode}
+                        </p>
+                        <p className="text-sm text-gray-400 mt-1">
+                          📞 {addr.phoneNumber}{addr.alternatePhone ? `, ${addr.alternatePhone}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {!addr.isDefault && (
+                        <button
+                          onClick={() => handleSetDefaultAddress(addr.id)}
+                          className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                          title="Set as default"
+                        >
+                          <Star size={18} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openAddressModal(addr)}
+                        className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        title="Edit"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAddress(addr.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+
+      {/* Address Modal */}
+      <AnimatePresence>
+        {showAddressModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowAddressModal(false)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingAddress ? 'Edit Address' : 'Add New Address'}
+                </h3>
+                <button onClick={() => setShowAddressModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Label Selection */}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
+                    Address Type
+                  </label>
+                  <div className="flex gap-3">
+                    {['Home', 'Work', 'Other'].map(label => (
+                      <button
+                        key={label}
+                        onClick={() => setAddressForm(prev => ({ ...prev, label }))}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 font-medium transition-all ${
+                          addressForm.label === label 
+                            ? 'border-emerald-500 bg-emerald-50 text-emerald-700' 
+                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        {label === 'Home' ? <Home size={16} /> : label === 'Work' ? <Briefcase size={16} /> : <MapPin size={16} />}
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Full Name *</label>
+                    <input
+                      type="text"
+                      value={addressForm.fullName}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, fullName: e.target.value }))}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="Full name"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Phone *</label>
+                    <input
+                      type="tel"
+                      value={addressForm.phoneNumber}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, phoneNumber: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="10-digit mobile"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Alt Phone</label>
+                    <input
+                      type="tel"
+                      value={addressForm.alternatePhone}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, alternatePhone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="Optional"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Pincode *</label>
+                    <input
+                      type="text"
+                      value={addressForm.pincode}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="6-digit pincode"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">City *</label>
+                    <input
+                      type="text"
+                      value={addressForm.city}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, city: e.target.value }))}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="City"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">State *</label>
+                    <select
+                      value={addressForm.state}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, state: e.target.value }))}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                    >
+                      <option value="">Select State</option>
+                      <option value="Andhra Pradesh">Andhra Pradesh</option>
+                      <option value="Bihar">Bihar</option>
+                      <option value="Delhi">Delhi</option>
+                      <option value="Gujarat">Gujarat</option>
+                      <option value="Karnataka">Karnataka</option>
+                      <option value="Kerala">Kerala</option>
+                      <option value="Madhya Pradesh">Madhya Pradesh</option>
+                      <option value="Maharashtra">Maharashtra</option>
+                      <option value="Punjab">Punjab</option>
+                      <option value="Rajasthan">Rajasthan</option>
+                      <option value="Tamil Nadu">Tamil Nadu</option>
+                      <option value="Telangana">Telangana</option>
+                      <option value="Uttar Pradesh">Uttar Pradesh</option>
+                      <option value="West Bengal">West Bengal</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Address *</label>
+                    <textarea
+                      value={addressForm.address}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, address: e.target.value }))}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+                      rows={2}
+                      placeholder="House No., Building, Street, Area"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Landmark</label>
+                    <input
+                      type="text"
+                      value={addressForm.landmark}
+                      onChange={(e) => setAddressForm(prev => ({ ...prev, landmark: e.target.value }))}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="Nearby landmark (optional)"
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={addressForm.isDefault}
+                    onChange={(e) => setAddressForm(prev => ({ ...prev, isDefault: e.target.checked }))}
+                    className="w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Set as default address</span>
+                </label>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setShowAddressModal(false)}
+                    className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveAddress}
+                    disabled={savingAddress}
+                    className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                  >
+                    {savingAddress ? 'Saving...' : 'Save Address'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Logout Section */}
       <motion.div

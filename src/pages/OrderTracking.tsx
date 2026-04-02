@@ -7,7 +7,6 @@ import { Order, UserProfile } from '../types';
 import { MapPin, Truck, ChevronLeft, Navigation, Phone, MessageCircle, Clock, CheckCircle2, Map as MapIcon, Bell, Zap, XCircle, Locate } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap } from 'react-leaflet';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Type } from "@google/genai";
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getCurrentLocation } from '../hooks/useGeolocation';
@@ -74,29 +73,16 @@ const OrderTracking: React.FC = () => {
     if (isOptimizing) return;
     setIsOptimizing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: `Given a current location [${currentLoc[0]}, ${currentLoc[1]}] and a destination [${dest[0]}, ${dest[1]}], suggest 5 intermediate coordinates that would form an optimized delivery route avoiding major traffic bottlenecks (simulated). Return ONLY a JSON array of coordinate pairs [[lat, lng], ...].`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.ARRAY,
-              items: { type: Type.NUMBER },
-              minItems: 2,
-              maxItems: 2
-            }
-          }
-        }
-      });
-
-      const route = JSON.parse(response.text);
-      setOptimizedRoute([currentLoc, ...route, dest]);
+      // Simple route with midpoint (no external API needed)
+      const midLat = (currentLoc[0] + dest[0]) / 2;
+      const midLng = (currentLoc[1] + dest[1]) / 2;
+      // Add slight variation to make route look more natural
+      const offset1: [number, number] = [currentLoc[0] + (midLat - currentLoc[0]) * 0.3, currentLoc[1] + (midLng - currentLoc[1]) * 0.25];
+      const offset2: [number, number] = [midLat + 0.001, midLng - 0.001];
+      const offset3: [number, number] = [dest[0] - (dest[0] - midLat) * 0.3, dest[1] - (dest[1] - midLng) * 0.25];
+      setOptimizedRoute([currentLoc, offset1, offset2, offset3, dest]);
     } catch (error) {
-      console.error("Error optimizing route:", error);
-      // Fallback to straight line if AI fails
+      console.error("Error creating route:", error);
       setOptimizedRoute([currentLoc, dest]);
     } finally {
       setIsOptimizing(false);

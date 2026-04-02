@@ -5,7 +5,6 @@ import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc
 import { Product, Order } from '../types';
 import { Plus, Package, Trash2, Edit3, CheckCircle, XCircle, AlertCircle, ShoppingBag, Truck, Clock, MapPin, Sparkles, Loader2, RefreshCw, Camera, Upload, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Type } from "@google/genai";
 
 const ProducerDashboard: React.FC = () => {
   const { profile } = useAuth();
@@ -15,7 +14,7 @@ const ProducerDashboard: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [deliveryBoys, setDeliveryBoys] = useState<Record<string, string>>({});
+  const [deliveryBoys, setDeliveryBoys] = useState<{ [key: string]: string }>({});
   const [statusFilter, setStatusFilter] = useState<Order['status'] | 'all'>('all');
   const [confirmAction, setConfirmAction] = useState<{ type: 'confirm' | 'cancel' | 'shipped', orderId: string } | null>(null);
   const [newProduct, setNewProduct] = useState({
@@ -41,26 +40,18 @@ const ProducerDashboard: React.FC = () => {
     setIsGenerating(true);
     setAiSuggestions(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const apiKey = process.env.GROQ_API_KEY;
+      if (!apiKey) {
+        throw new Error("GROQ_API_KEY is not configured. Please add it to your .env.local file.");
+      }
       
       const categories = [
         "Electronics", "Fashion", "Home & Living", "Groceries", 
         "Beauty", "Sports", "Books", "Toys", "Automotive", "Health"
       ];
 
-      const imageParts = targetProduct.images.slice(0, 3).map(img => {
-        const [mimeType, data] = img.split(';base64,');
-        return {
-          inlineData: {
-            mimeType: mimeType.split(':')[1],
-            data: data
-          }
-        };
-      });
-
       const prompt = `
         Analyze this product ${targetProduct.title ? `titled "${targetProduct.title}"` : ''}.
-        ${targetProduct.images.length > 0 ? 'I have provided images of the product.' : ''}
         
         Generate:
         1. A compelling, professional, and SEO-friendly product description (max 150 words).
@@ -68,33 +59,35 @@ const ProducerDashboard: React.FC = () => {
         3. Suggest a competitive price in Indian Rupees (₹).
         4. Generate 5 relevant search tags.
 
-        Return the data in JSON format.
+        Return ONLY valid JSON in this exact format:
+        {"description": "...", "category": "...", "price": 123, "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]}
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: {
-          parts: [
-            { text: prompt },
-            ...imageParts
-          ]
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
         },
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              description: { type: Type.STRING },
-              category: { type: Type.STRING },
-              price: { type: Type.NUMBER },
-              tags: { type: Type.ARRAY, items: { type: Type.STRING } }
-            },
-            required: ["description", "category", "price", "tags"]
-          }
-        }
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 500
+        })
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || `API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices[0]?.message?.content || '{}';
       
-      const result = JSON.parse(response.text);
+      // Extract JSON from response (in case there's extra text)
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const result = JSON.parse(jsonMatch ? jsonMatch[0] : '{}');
       
       if (result.description) {
         if (isEdit && editingProduct) {
@@ -104,7 +97,7 @@ const ProducerDashboard: React.FC = () => {
             category: result.category || editingProduct.category
           });
         } else {
-          setNewProduct(prev => ({ 
+          setNewProduct((prev: typeof newProduct) => ({ 
             ...prev, 
             description: result.description,
             category: result.category || prev.category
@@ -117,9 +110,9 @@ const ProducerDashboard: React.FC = () => {
           tags: result.tags
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Generation Error:", error);
-      alert("Failed to generate smart suggestions. Please try again.");
+      alert(`Failed to generate smart suggestions: ${error?.message || error}`);
     } finally {
       setIsGenerating(false);
     }
@@ -147,7 +140,7 @@ const ProducerDashboard: React.FC = () => {
           images: [...editingProduct.images, ...base64Images]
         });
       } else {
-        setNewProduct(prev => ({
+        setNewProduct((prev: typeof newProduct) => ({
           ...prev,
           images: [...prev.images, ...base64Images]
         }));
@@ -174,7 +167,7 @@ const ProducerDashboard: React.FC = () => {
           videoUrl: base64Video
         });
       } else {
-        setNewProduct(prev => ({
+        setNewProduct((prev: typeof newProduct) => ({
           ...prev,
           videoUrl: base64Video
         }));
@@ -211,7 +204,7 @@ const ProducerDashboard: React.FC = () => {
 
   useEffect(() => {
     const fetchDeliveryBoys = async () => {
-      const dbIds = Array.from(new Set(orders.map(o => o.deliveryBoyId).filter(Boolean))) as string[];
+      const dbIds = Array.from(new Set(orders.map((o: Order) => o.deliveryBoyId).filter(Boolean))) as string[];
       const missingIds = dbIds.filter(id => !deliveryBoys[id]);
       
       if (missingIds.length === 0) return;
@@ -229,7 +222,7 @@ const ProducerDashboard: React.FC = () => {
       }
 
       if (Object.keys(newNames).length > 0) {
-        setDeliveryBoys(prev => ({ ...prev, ...newNames }));
+        setDeliveryBoys((prev: Record<string, string>) => ({ ...prev, ...newNames }));
       }
     };
 
@@ -240,7 +233,7 @@ const ProducerDashboard: React.FC = () => {
     e.preventDefault();
     if (!profile) return;
     try {
-      const filteredImages = newProduct.images.filter(url => url.trim() !== '');
+      const filteredImages = newProduct.images.filter((url: string) => url.trim() !== '');
       const finalImages = filteredImages.length > 0 
         ? filteredImages 
         : [`https://picsum.photos/seed/${Math.random()}/400/400`];
@@ -274,7 +267,7 @@ const ProducerDashboard: React.FC = () => {
     e.preventDefault();
     if (!editingProduct) return;
     try {
-      const filteredImages = editingProduct.images.filter(url => url.trim() !== '');
+      const filteredImages = editingProduct.images.filter((url: string) => url.trim() !== '');
       const finalImages = filteredImages.length > 0 
         ? filteredImages 
         : [`https://picsum.photos/seed/${Math.random()}/400/400`];
@@ -306,9 +299,9 @@ const ProducerDashboard: React.FC = () => {
 
   const filteredOrders = statusFilter === 'all' 
     ? orders 
-    : orders.filter(o => o.status === statusFilter);
+    : orders.filter((o: Order) => o.status === statusFilter);
 
-  const lowStockProducts = products.filter(p => p.stock < 5);
+  const lowStockProducts = products.filter((p: Product) => p.stock < 5);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -397,8 +390,8 @@ const ProducerDashboard: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
             { label: 'Total Products', value: products.length, color: 'blue' },
-            { label: 'Active Orders', value: orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled' && o.status !== 'returned').length, color: 'indigo' },
-            { label: 'Total Earnings', value: `₹${orders.filter(o => o.status === 'delivered').reduce((acc, o) => acc + o.totalAmount, 0).toFixed(2)}`, color: 'green' },
+            { label: 'Active Orders', value: orders.filter((o: Order) => o.status !== 'delivered' && o.status !== 'cancelled' && o.status !== 'returned').length, color: 'indigo' },
+            { label: 'Total Earnings', value: `₹${orders.filter((o: Order) => o.status === 'delivered').reduce((acc: number, o: Order) => acc + o.totalAmount, 0).toFixed(2)}`, color: 'green' },
             { label: 'Returns / Strikes', value: `${profile?.strikes || 0} / 3`, color: profile?.strikes && profile.strikes >= 3 ? 'red' : profile?.strikes && profile.strikes > 0 ? 'amber' : 'gray' }
           ].map((stat, i) => (
             <motion.div 

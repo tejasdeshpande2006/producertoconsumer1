@@ -128,11 +128,11 @@ const ProductDetails: React.FC = () => {
           quantity: existingQuantity + quantity
         });
       } else {
-        // Add new item to cart
+        // Add new item to cart (price includes 5% platform fee)
         await addDoc(cartRef, {
           productId: product.id,
           title: product.title,
-          price: product.price,
+          price: product.price * 1.05,
           quantity: quantity,
           image: product.images[0],
           sellerId: product.sellerId,
@@ -392,8 +392,8 @@ const ProductDetails: React.FC = () => {
               transition={{ delay: 0.5 }}
               className="flex items-baseline space-x-6 bg-white/50 backdrop-blur-md p-8 rounded-[2.5rem] border border-white/20 shadow-sm w-fit"
             >
-              <span className="text-7xl font-black text-gray-900 tracking-tighter">₹{product.price.toLocaleString()}</span>
-              <span className="text-2xl text-gray-300 font-bold line-through decoration-red-500/40 decoration-4">₹{(product.price * 1.2).toLocaleString()}</span>
+              <span className="text-7xl font-black text-gray-900 tracking-tighter">₹{(product.price * 1.05).toLocaleString()}</span>
+              <span className="text-2xl text-gray-300 font-bold line-through decoration-red-500/40 decoration-4">₹{(product.price * 1.25).toLocaleString()}</span>
             </motion.div>
 
             <div className="grid grid-cols-2 gap-6">

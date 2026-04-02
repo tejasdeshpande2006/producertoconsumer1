@@ -318,6 +318,12 @@ async function startServer() {
 
     if (!userId || !totalAmount || !items) return res.status(400).json({ error: 'Invalid parameters' });
 
+    // Calculate platform fee (5% of total before GST)
+    // totalAmount already includes 5% fee from cart
+    // Base amount = totalAmount / 1.05
+    const baseAmount = totalAmount / 1.05;
+    const platformFee = totalAmount - baseAmount;
+
     try {
       const userRef = db.collection('users').doc(userId);
       let userSnap;
@@ -329,6 +335,22 @@ async function startServer() {
 
       if (!userSnap.exists) return res.status(404).json({ error: `User profile not found for ID: ${userId}` });
 
+      // Find admin user to credit platform fee
+      let adminId: string | null = null;
+      try {
+        const usersCollection = db.collection('users');
+        const adminQuery = await usersCollection.limit(100).get();
+        for (const doc of adminQuery.docs) {
+          const data = doc.data();
+          if (data.role === 'admin' || data.email === 'vpk525252@gmail.com') {
+            adminId = doc.id;
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not find admin user for fee credit:', err);
+      }
+
       const orderRef = db.collection('orders').doc();
       const transactionRef = userRef.collection('walletTransactions').doc();
       const fv = db.FieldValue || FieldValue;
@@ -338,22 +360,48 @@ async function startServer() {
         const currentBalance = userDoc.data()?.walletBalance || 0;
         if (currentBalance < totalAmount) throw new Error(`Insufficient funds`);
 
+        // Deduct full amount from buyer
         t.update(userRef, { walletBalance: currentBalance - totalAmount, serverKey: SERVER_KEY });
         t.set(transactionRef, {
           amount: totalAmount,
           type: 'debit',
           timestamp: fv.serverTimestamp(),
-          description: `Purchase of ${items.length} item(s)`,
+          description: `Purchase of ${items.length} item(s) (includes ₹${platformFee.toFixed(2)} platform fee)`,
           serverKey: SERVER_KEY
         });
 
+        // Credit admin wallet with platform fee (5%)
+        if (adminId) {
+          const adminRef = db.collection('users').doc(adminId);
+          const adminDoc = await t.get(adminRef);
+          const adminBalance = adminDoc.data()?.walletBalance || 0;
+          
+          t.update(adminRef, { 
+            walletBalance: adminBalance + platformFee, 
+            serverKey: SERVER_KEY 
+          });
+          
+          const adminTransRef = adminRef.collection('walletTransactions').doc();
+          t.set(adminTransRef, {
+            amount: platformFee,
+            type: 'credit',
+            timestamp: fv.serverTimestamp(),
+            description: `Platform fee (5%) from order ${orderRef.id.slice(0, 8)}`,
+            serverKey: SERVER_KEY
+          });
+        }
+
+        // Create order record
         t.set(orderRef, {
           buyerId: userId,
           buyerName: userDoc.data()?.name || 'Unknown Buyer',
           shippingAddress: orderDetails.shippingAddress || '123 Main St, Suite 456, Metro City',
+          deliveryDetails: orderDetails.deliveryDetails || null,
           sellerId: sellerId || 'demo_seller',
           status: 'pending',
           totalAmount: totalAmount,
+          baseAmount: baseAmount,
+          platformFee: platformFee,
           timestamp: fv.serverTimestamp(),
           items: items,
           serverKey: SERVER_KEY

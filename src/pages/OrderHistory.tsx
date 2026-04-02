@@ -3,24 +3,42 @@ import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType, toDate } from '../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { Order, UserProfile } from '../types';
-import { Package, Clock, CheckCircle2, Truck, AlertCircle, MapPin, Calendar, Navigation, XCircle, WifiOff, RefreshCw } from 'lucide-react';
+import { Package, Clock, CheckCircle2, Truck, AlertCircle, MapPin, Calendar, Navigation, XCircle, WifiOff, RefreshCw, FileText, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { updateDoc, increment, addDoc, serverTimestamp } from 'firebase/firestore';
 import { offlineDb } from '../services/offlineDb';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { motion, AnimatePresence } from 'motion/react';
 import { processOrderReturn } from '../services/strikeService';
+import Receipt from '../components/Receipt';
+
+const RETURN_REASONS = [
+  'Product damaged during delivery',
+  'Wrong product delivered',
+  'Product quality not as expected',
+  'Product expired or near expiry',
+  'Missing items in order',
+  'Product not as described',
+  'Other'
+];
 
 const OrderHistory: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [deliveryBoys, setDeliveryBoys] = useState<Record<string, string>>({});
+  const [deliveryBoys, setDeliveryBoys] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(true);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [returningOrderId, setReturningOrderId] = useState<string | null>(null);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnOrderTarget, setReturnOrderTarget] = useState<Order | null>(null);
+  const [returnReason, setReturnReason] = useState('');
+  const [returnDescription, setReturnDescription] = useState('');
+  const [processingReturn, setProcessingReturn] = useState(false);
   const isOnline = useOnlineStatus();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
+  const [sellerInfo, setSellerInfo] = useState<{ [key: string]: { name: string; email?: string; phone?: string } }>({});
 
   useEffect(() => {
     if (!user) return;
@@ -85,6 +103,29 @@ const OrderHistory: React.FC = () => {
     fetchDeliveryBoys();
   }, [orders]);
 
+  const handleShowReceipt = async (order: Order) => {
+    // Fetch seller info if not already cached
+    if (!sellerInfo[order.sellerId]) {
+      try {
+        const sellerDoc = await getDoc(doc(db, 'users', order.sellerId));
+        if (sellerDoc.exists()) {
+          const data = sellerDoc.data();
+          setSellerInfo(prev => ({
+            ...prev,
+            [order.sellerId]: {
+              name: data.name || 'Producer Store',
+              email: data.email,
+              phone: data.phoneNumber
+            }
+          }));
+        }
+      } catch (error) {
+        console.error("Error fetching seller info:", error);
+      }
+    }
+    setReceiptOrder(order);
+  };
+
   const getEstimatedDelivery = (timestamp: any) => {
     const date = toDate(timestamp);
     if (!date) return 'Calculating...';
@@ -100,6 +141,50 @@ const OrderHistory: React.FC = () => {
       setCancellingOrderId(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
+    }
+  };
+
+  const openReturnModal = (order: Order) => {
+    setReturnOrderTarget(order);
+    setReturnReason('');
+    setReturnDescription('');
+    setShowReturnModal(true);
+  };
+
+  const handleSubmitReturnRequest = async () => {
+    if (!returnOrderTarget || !returnReason) return;
+    
+    setProcessingReturn(true);
+    try {
+      // Update order with return request
+      await updateDoc(doc(db, 'orders', returnOrderTarget.id), {
+        status: 'return_requested',
+        returnRequest: {
+          reason: returnReason,
+          description: returnDescription,
+          requestedAt: serverTimestamp(),
+          status: 'pending'
+        }
+      });
+
+      // Add notification for seller
+      await addDoc(collection(db, 'notifications'), {
+        userId: returnOrderTarget.sellerId,
+        title: 'Return Request Received',
+        message: `A return request has been submitted for order #${returnOrderTarget.id.slice(-8).toUpperCase()}. Reason: ${returnReason}`,
+        type: 'warning',
+        read: false,
+        timestamp: serverTimestamp()
+      });
+
+      setShowReturnModal(false);
+      setReturnOrderTarget(null);
+      alert('Return request submitted successfully! The seller will review your request.');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `orders/${returnOrderTarget.id}`);
+      alert('Failed to submit return request. Please try again.');
+    } finally {
+      setProcessingReturn(false);
     }
   };
 
@@ -120,6 +205,7 @@ const OrderHistory: React.FC = () => {
       case 'delivered': return <CheckCircle2 className="w-5 h-5 text-green-500" />;
       case 'cancelled': return <AlertCircle className="w-5 h-5 text-red-500" />;
       case 'returned': return <RefreshCw className="w-5 h-5 text-amber-500" />;
+      case 'return_requested': return <RefreshCw className="w-5 h-5 text-orange-500" />;
       default: return <Clock className="w-5 h-5 text-gray-500" />;
     }
   };
@@ -300,6 +386,16 @@ const OrderHistory: React.FC = () => {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-6 pt-4">
+                      {/* Receipt/Invoice Button - Available for all orders */}
+                      <motion.button 
+                        whileHover={{ scale: 1.05, y: -2 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleShowReceipt(order)}
+                        className="flex items-center space-x-3 px-10 py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-emerald-700 transition-all shadow-2xl shadow-emerald-100 border border-emerald-500"
+                      >
+                        <FileText className="w-5 h-5" />
+                        <span>{order.status === 'delivered' ? 'Receipt' : 'Invoice'}</span>
+                      </motion.button>
                       {(order.status === 'shipped' || order.status === 'delivered') && (
                         <motion.button 
                           whileHover={{ scale: 1.05, y: -2 }}
@@ -312,33 +408,26 @@ const OrderHistory: React.FC = () => {
                         </motion.button>
                       )}
                       {order.status === 'delivered' && (
-                        <div className="flex-1">
-                          {returningOrderId === order.id ? (
-                            <div className="flex items-center space-x-4">
-                              <button 
-                                onClick={() => handleReturnOrder(order)}
-                                className="px-8 py-4 bg-amber-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-100"
-                              >
-                                Confirm Return
-                              </button>
-                              <button 
-                                onClick={() => setReturningOrderId(null)}
-                                className="px-8 py-4 bg-gray-100 text-gray-600 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-gray-200 transition-all"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <motion.button 
-                              whileHover={{ scale: 1.05, y: -2 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={() => setReturningOrderId(order.id)}
-                              className="flex items-center space-x-3 px-10 py-5 bg-amber-50 text-amber-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-amber-100 transition-all border border-amber-100"
-                            >
-                              <RefreshCw className="w-5 h-5" />
-                              <span>Return Order</span>
-                            </motion.button>
-                          )}
+                        <motion.button 
+                          whileHover={{ scale: 1.05, y: -2 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => openReturnModal(order)}
+                          className="flex items-center space-x-3 px-10 py-5 bg-amber-50 text-amber-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-amber-100 transition-all border border-amber-100"
+                        >
+                          <RefreshCw className="w-5 h-5" />
+                          <span>Return Order</span>
+                        </motion.button>
+                      )}
+                      {order.status === 'return_requested' && (
+                        <div className="flex items-center space-x-3 px-6 py-4 bg-orange-50 text-orange-600 rounded-2xl border border-orange-100">
+                          <RefreshCw className="w-5 h-5 animate-spin" />
+                          <span className="text-xs font-black uppercase tracking-wider">Return Under Review</span>
+                        </div>
+                      )}
+                      {order.status === 'returned' && (
+                        <div className="flex items-center space-x-3 px-6 py-4 bg-green-50 text-green-600 rounded-2xl border border-green-100">
+                          <CheckCircle2 className="w-5 h-5" />
+                          <span className="text-xs font-black uppercase tracking-wider">Refund Credited</span>
                         </div>
                       )}
                       {order.status === 'pending' && (
@@ -386,6 +475,123 @@ const OrderHistory: React.FC = () => {
         )}
       </div>
       </div>
+
+      {/* Receipt Modal */}
+      {receiptOrder && (
+        <Receipt
+          order={receiptOrder}
+          sellerName={sellerInfo[receiptOrder.sellerId]?.name}
+          sellerEmail={sellerInfo[receiptOrder.sellerId]?.email}
+          sellerPhone={sellerInfo[receiptOrder.sellerId]?.phone}
+          onClose={() => setReceiptOrder(null)}
+          type={receiptOrder.status === 'delivered' ? 'receipt' : 'invoice'}
+        />
+      )}
+
+      {/* Return Request Modal */}
+      <AnimatePresence>
+        {showReturnModal && returnOrderTarget && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowReturnModal(false)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl"
+            >
+              <div className="flex items-center space-x-4 mb-6">
+                <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center">
+                  <RefreshCw className="w-7 h-7 text-amber-600" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-gray-900 tracking-tight">Return Request</h2>
+                  <p className="text-gray-400 text-sm">Order #{returnOrderTarget.id.slice(-8).toUpperCase()}</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* Order Summary */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Order Items</p>
+                  {returnOrderTarget.items.map((item, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span className="text-gray-700">{item.title} × {item.quantity}</span>
+                      <span className="font-bold text-gray-900">₹{(item.price * item.quantity).toFixed(2)}</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between">
+                    <span className="font-bold text-gray-700">Total Refund</span>
+                    <span className="font-black text-emerald-600">₹{returnOrderTarget.totalAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Reason Selection */}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
+                    Reason for Return <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={returnReason}
+                    onChange={(e) => setReturnReason(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-medium focus:bg-white focus:border-amber-300 focus:ring-4 focus:ring-amber-50 outline-none transition-all"
+                  >
+                    <option value="">Select a reason</option>
+                    {RETURN_REASONS.map(reason => (
+                      <option key={reason} value={reason}>{reason}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Additional Details */}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">
+                    Additional Details (Optional)
+                  </label>
+                  <textarea
+                    value={returnDescription}
+                    onChange={(e) => setReturnDescription(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-medium focus:bg-white focus:border-amber-300 focus:ring-4 focus:ring-amber-50 outline-none transition-all resize-none"
+                    rows={3}
+                    placeholder="Please describe the issue in detail..."
+                  />
+                </div>
+
+                {/* Refund Info */}
+                <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                  <p className="text-sm text-emerald-800 font-medium">
+                    <strong>Refund Policy:</strong> Once your return request is approved, the full amount (₹{returnOrderTarget.totalAmount.toFixed(2)}) will be credited to your wallet within 24-48 hours.
+                  </p>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-4 pt-2">
+                  <button
+                    onClick={() => setShowReturnModal(false)}
+                    className="flex-1 py-4 px-6 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleSubmitReturnRequest}
+                    disabled={!returnReason || processingReturn}
+                    className="flex-1 py-4 px-6 bg-amber-600 text-white rounded-xl font-bold hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processingReturn ? 'Submitting...' : 'Submit Request'}
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
