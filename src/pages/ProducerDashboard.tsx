@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, storage, handleFirestoreError, OperationType } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc, orderBy, getDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Product, Order } from '../types';
 import { Plus, Package, Trash2, Edit3, CheckCircle, XCircle, AlertCircle, ShoppingBag, Truck, Clock, MapPin, Sparkles, Loader2, RefreshCw, Camera, Upload, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -27,6 +28,7 @@ const ProducerDashboard: React.FC = () => {
     videoUrl: ''
   });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<{
     category?: string;
     price?: number;
@@ -148,32 +150,45 @@ const ProducerDashboard: React.FC = () => {
     });
   };
 
-  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check file size (Firestore limit is 1MB, but let's allow a bit more for base64 overhead)
-    if (file.size > 800000) { // ~800KB to stay safe with base64 overhead
-      alert("Video file is too large. Please upload a video smaller than 800KB due to database limits.");
+    // Check file size - now allowing up to 50MB
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+      alert("Video file is too large. Please upload a video smaller than 50MB.");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64Video = reader.result as string;
+    setIsUploadingVideo(true);
+    try {
+      // Create a unique filename
+      const timestamp = Date.now();
+      const fileName = `product-videos/${profile?.id || 'unknown'}/${timestamp}-${file.name}`;
+      const storageRef = ref(storage, fileName);
+      
+      // Upload to Firebase Storage
+      await uploadBytes(storageRef, file);
+      const downloadUrl = await getDownloadURL(storageRef);
+
       if (isEdit && editingProduct) {
         setEditingProduct({
           ...editingProduct,
-          videoUrl: base64Video
+          videoUrl: downloadUrl
         });
       } else {
         setNewProduct((prev: typeof newProduct) => ({
           ...prev,
-          videoUrl: base64Video
+          videoUrl: downloadUrl
         }));
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error uploading video:', error);
+      alert('Failed to upload video. Please try again.');
+    } finally {
+      setIsUploadingVideo(false);
+    }
   };
 
   useEffect(() => {
@@ -977,16 +992,26 @@ const ProducerDashboard: React.FC = () => {
                   </div>
                 )}
                 <div className="col-span-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 block">Product Video (Max 800KB)</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 block">Product Video (Max 50MB)</label>
                   <div className="flex items-center space-x-4">
-                    <label className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50 transition-all cursor-pointer">
-                      <Upload className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm font-bold text-gray-600">Upload Video</span>
+                    <label className={`flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50 transition-all ${isUploadingVideo ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+                      {isUploadingVideo ? (
+                        <>
+                          <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                          <span className="text-sm font-bold text-indigo-600">Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm font-bold text-gray-600">Upload Video</span>
+                        </>
+                      )}
                       <input 
                         type="file" 
                         accept="video/*" 
                         className="hidden" 
                         onChange={(e) => handleVideoUpload(e, false)}
+                        disabled={isUploadingVideo}
                       />
                     </label>
                     {newProduct.videoUrl && (
@@ -1191,16 +1216,26 @@ const ProducerDashboard: React.FC = () => {
                   </div>
                 )}
                 <div className="col-span-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 block">Product Video (Max 800KB)</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1 block">Product Video (Max 50MB)</label>
                   <div className="flex items-center space-x-4">
-                    <label className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50 transition-all cursor-pointer">
-                      <Upload className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm font-bold text-gray-600">Upload Video</span>
+                    <label className={`flex-1 flex items-center justify-center space-x-2 px-4 py-3 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50 transition-all ${isUploadingVideo ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+                      {isUploadingVideo ? (
+                        <>
+                          <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                          <span className="text-sm font-bold text-indigo-600">Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm font-bold text-gray-600">Upload Video</span>
+                        </>
+                      )}
                       <input 
                         type="file" 
                         accept="video/*" 
                         className="hidden" 
                         onChange={(e) => handleVideoUpload(e, true)}
+                        disabled={isUploadingVideo}
                       />
                     </label>
                     {editingProduct.videoUrl && (
