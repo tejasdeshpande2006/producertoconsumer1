@@ -154,7 +154,7 @@ const ProducerDashboard: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check file size - now allowing up to 50MB
+    // Check file size - allowing up to 50MB
     const maxSize = 50 * 1024 * 1024; // 50MB
     if (file.size > maxSize) {
       alert("Video file is too large. Please upload a video smaller than 50MB.");
@@ -165,7 +165,7 @@ const ProducerDashboard: React.FC = () => {
     try {
       // Create a unique filename
       const timestamp = Date.now();
-      const fileName = `product-videos/${profile?.id || 'unknown'}/${timestamp}-${file.name}`;
+      const fileName = `product-videos/${profile?.uid || 'unknown'}/${timestamp}-${file.name}`;
       const storageRef = ref(storage, fileName);
       
       // Upload to Firebase Storage
