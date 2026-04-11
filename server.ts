@@ -359,6 +359,15 @@ async function startServer() {
         const userDoc = await t.get(userRef);
         const currentBalance = userDoc.data()?.walletBalance || 0;
         if (currentBalance < totalAmount) throw new Error(`Insufficient funds`);
+        let adminRef: any = null;
+        let adminBalance = 0;
+
+        // Firestore transactions require all reads to happen before writes.
+        if (adminId) {
+          adminRef = db.collection('users').doc(adminId);
+          const adminDoc = await t.get(adminRef);
+          adminBalance = adminDoc.data()?.walletBalance || 0;
+        }
 
         // Deduct full amount from buyer
         t.update(userRef, { walletBalance: currentBalance - totalAmount, serverKey: SERVER_KEY });
@@ -371,11 +380,7 @@ async function startServer() {
         });
 
         // Credit admin wallet with platform fee (5%)
-        if (adminId) {
-          const adminRef = db.collection('users').doc(adminId);
-          const adminDoc = await t.get(adminRef);
-          const adminBalance = adminDoc.data()?.walletBalance || 0;
-          
+        if (adminRef) {
           t.update(adminRef, { 
             walletBalance: adminBalance + platformFee, 
             serverKey: SERVER_KEY 

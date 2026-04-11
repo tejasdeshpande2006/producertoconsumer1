@@ -184,25 +184,41 @@ const CartPage: React.FC = () => {
 
     setCheckingOut(true);
     try {
-      const response = await fetch('/api/wallet/purchase', {
+      const payload = {
+        userId: user.uid,
+        cartItemIds: items.map(i => i.id),
+        orderDetails: {
+          totalAmount: total * 1.18,
+          shippingAddress: getFullShippingAddress(),
+          deliveryDetails: deliveryDetails,
+          sellerId: items[0]?.sellerId,
+          items: items.map(i => ({ productId: i.productId, title: i.title, price: i.price, quantity: i.quantity }))
+        }
+      };
+
+      const requestInit: RequestInit = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.uid,
-          cartItemIds: items.map(i => i.id),
-          orderDetails: {
-            totalAmount: total * 1.18,
-            shippingAddress: getFullShippingAddress(),
-            deliveryDetails: deliveryDetails,
-            sellerId: items[0]?.sellerId,
-            items: items.map(i => ({ productId: i.productId, title: i.title, price: i.price, quantity: i.quantity }))
-          }
-        })
-      });
+        body: JSON.stringify(payload)
+      };
+
+      let response: Response;
+      try {
+        response = await fetch('/api/wallet/purchase', requestInit);
+      } catch {
+        response = await fetch('http://localhost:3000/api/wallet/purchase', requestInit);
+      }
 
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Checkout failed');
+        let message = 'Checkout failed';
+        try {
+          const err = await response.json();
+          message = err.error || message;
+        } catch {
+          const text = await response.text();
+          if (text) message = text;
+        }
+        throw new Error(message);
       }
 
       setSuccess(true);
